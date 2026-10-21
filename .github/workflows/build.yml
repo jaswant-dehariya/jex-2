@@ -15,7 +15,14 @@ jobs:
         run: |
           unzip -o -q ./*.zip -d src
           DIR=$(dirname "$(find src -name settings.gradle.kts | head -1)")
+          echo "Project folder: $DIR"
           echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
+
+      - name: Patch known compile error
+        run: |
+          F=$(find src -name JexComponents.kt | head -1)
+          grep -q "androidx.compose.runtime.setValue" "$F" || sed -i 's/^import androidx.compose.runtime.getValue$/import androidx.compose.runtime.getValue\nimport androidx.compose.runtime.setValue/' "$F"
+          grep -n "runtime.setValue" "$F"
 
       - uses: actions/setup-java@v4
         with:
