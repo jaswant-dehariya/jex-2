@@ -1,0 +1,60 @@
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip project
+        run: |
+          unzip -o -q ./*.zip -d src
+          DIR=$(dirname "$(find src -name settings.gradle.kts | head -1)")
+          echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Accept Android licenses
+        run: yes | sdkmanager --licenses > /dev/null || true
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 9.1.0
+
+      - name: Build APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set +e
+          gradle assembleDirectDebug --console=plain --stacktrace > build.log 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            echo "BUILD FAILED. Asli errors:"
+            grep -E "^e: " build.log | sed 's#file://##' | sort -u | head -40 | while read -r line; do
+              echo "::error::$line"
+              echo "$line"
+            done
+            grep -E "What went wrong" -A6 build.log | head -30
+          fi
+          exit $code
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ${{ env.PROJECT_DIR }}/build.log
+          if-no-files-found: ignore
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: JexAI-apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/direct/debug/*.apk
